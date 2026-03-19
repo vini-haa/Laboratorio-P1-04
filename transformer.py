@@ -158,6 +158,64 @@ def encoder_stack(x, d_model, d_ff, n_layers):
 
 
 # =============================================================================
+# COMMIT 6 — Positional Encoding + Pipeline Completo
+# PE(pos, 2i)   = sin(pos / 10000^(2i/d_model))
+# PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+# =============================================================================
+
+def positional_encoding(seq_len, d_model):
+    """
+    Gera a matriz de Positional Encoding (sinusoidal).
+
+    Parâmetros:
+        seq_len: comprimento da sequência
+        d_model: dimensão do modelo
+
+    Retorna:
+        PE: shape (seq_len, d_model)
+    """
+    PE = np.zeros((seq_len, d_model))
+    position = np.arange(seq_len).reshape(-1, 1)            # (seq_len, 1)
+    div_term = 10000 ** (np.arange(0, d_model, 2) / d_model)  # (d_model/2,)
+
+    PE[:, 0::2] = np.sin(position / div_term)   # dimensões pares
+    PE[:, 1::2] = np.cos(position / div_term)   # dimensões ímpares
+
+    return PE
+
+
+def transformer_forward(src_tokens, tgt_tokens, d_model, d_ff, vocab_size, n_layers):
+    """
+    Pipeline completo: Encoder → Decoder.
+
+    Parâmetros:
+        src_tokens: embeddings de entrada — shape (seq_len_src, d_model)
+        tgt_tokens: embeddings do alvo    — shape (seq_len_tgt, d_model)
+        d_model:    dimensão do modelo
+        d_ff:       dimensão interna da FFN
+        vocab_size: tamanho do vocabulário
+        n_layers:   número de camadas no Encoder e no Decoder
+
+    Retorna:
+        probs: distribuição sobre o vocabulário — shape (seq_len_tgt, vocab_size)
+    """
+    seq_len_src = src_tokens.shape[0]
+    seq_len_tgt = tgt_tokens.shape[0]
+
+    # 1) Adicionar Positional Encoding aos embeddings
+    src = src_tokens + positional_encoding(seq_len_src, d_model)
+    tgt = tgt_tokens + positional_encoding(seq_len_tgt, d_model)
+
+    # 2) Encoder: processa a sequência fonte
+    Z = encoder_stack(src, d_model, d_ff, n_layers)
+
+    # 3) Decoder: gera distribuições de probabilidade sobre o vocabulário
+    probs = decoder_stack(tgt, Z, d_model, d_ff, vocab_size, n_layers)
+
+    return probs
+
+
+# =============================================================================
 # COMMIT 5 — DecoderBlock
 # Fluxo: Y → Masked Self-Attn → Add&Norm → Cross-Attn(Z) → Add&Norm → FFN → Add&Norm → probs
 # =============================================================================
@@ -332,3 +390,34 @@ if __name__ == "__main__":
     print(f"Shape saída (probs): {probs.shape}  (deve ser ({seq_len_y}, {vocab_size}))")
     print(f"Soma das probs por posição (deve ser ~1.0): {probs.sum(axis=-1).round(6)}")
     print("Teste passou!\n")
+
+    # --- Teste: positional_encoding ---
+    PE = positional_encoding(seq_len, d_model)
+
+    print("=== Teste: positional_encoding ===")
+    print(f"Shape PE: {PE.shape}  (deve ser ({seq_len}, {d_model}))")
+    print(f"PE[0, 0] (deve ser sin(0)=0.0): {PE[0, 0]:.6f}")
+    print(f"PE[0, 1] (deve ser cos(0)=1.0): {PE[0, 1]:.6f}")
+    print("Teste passou!\n")
+
+    # --- Teste: transformer_forward (pipeline completo) ---
+    n_layers   = 2
+    vocab_size_full = 50
+    seq_src = 5
+    seq_tgt = 3
+
+    src_emb = np.random.randn(seq_src, d_model)
+    tgt_emb = np.random.randn(seq_tgt, d_model)
+
+    probs_full = transformer_forward(src_emb, tgt_emb, d_model, d_ff, vocab_size_full, n_layers)
+
+    print("=== Teste: transformer_forward (pipeline completo) ===")
+    print(f"Shape src embeddings : ({seq_src}, {d_model})")
+    print(f"Shape tgt embeddings : ({seq_tgt}, {d_model})")
+    print(f"Shape saída (probs)  : {probs_full.shape}  (deve ser ({seq_tgt}, {vocab_size_full}))")
+    print(f"Soma das probs (deve ser ~1.0): {probs_full.sum(axis=-1).round(6)}")
+    print(f"Token predito por posição: {probs_full.argmax(axis=-1)}")
+    print("Teste passou!\n")
+    print("=" * 60)
+    print("TODOS OS TESTES PASSARAM — Transformer completo funcionando!")
+    print("=" * 60)
