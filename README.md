@@ -41,7 +41,7 @@ O projeto implementa os seguintes componentes do Transformer:
 
 ## Nota sobre Uso de IA
 
-Partes geradas/complementadas com IA, revisadas por [Seu Nome].
+Partes geradas/complementadas com IA, revisadas por Vinicius.
 
 ## Créditos
 
